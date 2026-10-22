@@ -1,0 +1,1440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="MediBot, a friendly health chatbot that works offline, shows pictures and learns from conversations.">
+<meta name="theme-color" content="#061315">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='4' y='8' width='40' height='34' rx='14' fill='%2314b8a6'/%3E%3Crect x='10' y='15' width='28' height='19' rx='9' fill='white'/%3E%3Ccircle cx='18' cy='23' r='2.6'/%3E%3Ccircle cx='30' cy='23' r='2.6'/%3E%3C/svg%3E">
+<script src="config.js"></script>
+<script src="knowledge.js"></script>
+</head>
+<body>
+<title>MediBot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Sora:wght@500;600;700&display=swap">
+<style>
+/* Layout: one-screen glass chat over a slow-moving aurora. Header, transcript (hero when empty), suggestion row + composer; drawers slide over from the right. */
+:root {
+  --bg: #eaf5f2;
+  --bg-2: #dcefea;
+  --panel: rgba(255, 255, 255, 0.72);
+  --panel-solid: #f7fbfa;
+  --ink: #0f2a2b;
+  --muted: #557370;
+  --line: rgba(13, 110, 110, 0.14);
+  --accent: #0b9a83;
+  --accent-2: #1f8fd1;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(11, 154, 131, 0.12);
+  --bot: rgba(255, 255, 255, 0.86);
+  --warm: #e2683f;
+  --warm-soft: rgba(226, 104, 63, 0.12);
+  --alert: #c0362c;
+  --alert-soft: rgba(192, 54, 44, 0.1);
+  --ok: #138a52;
+  --blob-1: rgba(47, 211, 181, 0.45);
+  --blob-2: rgba(76, 195, 255, 0.35);
+  --blob-3: rgba(255, 138, 101, 0.28);
+  --shadow: 0 10px 40px rgba(15, 60, 58, 0.12);
+  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #061315; --bg-2: #0a1d20; --panel: rgba(12, 30, 33, 0.66); --panel-solid: #0d2225; --ink: #e4f4f0; --muted: #8db0aa;
+    --line: rgba(148, 214, 203, 0.14); --accent: #2fd3b5; --accent-2: #4cc3ff; --accent-ink: #03231d; --accent-soft: rgba(47, 211, 181, 0.13);
+    --bot: rgba(255, 255, 255, 0.05); --warm: #ff8a65; --warm-soft: rgba(255, 138, 101, 0.14); --alert: #ff7b72; --alert-soft: rgba(255, 123, 114, 0.12);
+    --ok: #4ade9a; --blob-1: rgba(47, 211, 181, 0.32); --blob-2: rgba(76, 195, 255, 0.22); --blob-3: rgba(255, 138, 101, 0.16);
+    --shadow: 0 10px 40px rgba(0, 0, 0, 0.35); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #061315; --bg-2: #0a1d20; --panel: rgba(12, 30, 33, 0.66); --panel-solid: #0d2225; --ink: #e4f4f0; --muted: #8db0aa;
+  --line: rgba(148, 214, 203, 0.14); --accent: #2fd3b5; --accent-2: #4cc3ff; --accent-ink: #03231d; --accent-soft: rgba(47, 211, 181, 0.13);
+  --bot: rgba(255, 255, 255, 0.05); --warm: #ff8a65; --warm-soft: rgba(255, 138, 101, 0.14); --alert: #ff7b72; --alert-soft: rgba(255, 123, 114, 0.12);
+  --ok: #4ade9a; --blob-1: rgba(47, 211, 181, 0.32); --blob-2: rgba(76, 195, 255, 0.22); --blob-3: rgba(255, 138, 101, 0.16);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.35); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  display: flex; justify-content: center; overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+
+/* Aurora background */
+.aurora { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; background: radial-gradient(1200px 600px at 50% -10%, var(--bg-2), transparent 70%), var(--bg); }
+.aurora i { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 1; will-change: transform; }
+.aurora i:nth-child(1) { width: 46vmax; height: 46vmax; left: -12vmax; top: -14vmax; background: var(--blob-1); animation: drift1 22s ease-in-out infinite alternate; }
+.aurora i:nth-child(2) { width: 40vmax; height: 40vmax; right: -14vmax; top: 10vh; background: var(--blob-2); animation: drift2 26s ease-in-out infinite alternate; }
+.aurora i:nth-child(3) { width: 34vmax; height: 34vmax; left: 20vw; bottom: -18vmax; background: var(--blob-3); animation: drift3 30s ease-in-out infinite alternate; }
+@keyframes drift1 { to { transform: translate(12vw, 10vh) scale(1.15); } }
+@keyframes drift2 { to { transform: translate(-14vw, 14vh) scale(0.9); } }
+@keyframes drift3 { to { transform: translate(10vw, -12vh) scale(1.2); } }
+
+.app {
+  position: relative; z-index: 1; width: 100%; max-width: 860px; height: 100%;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  border-inline: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.gutter {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Header */
+.app > header { display: flex; align-items: center; gap: 12px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.face { width: 46px; height: 46px; flex: none; animation: float 4s ease-in-out infinite; filter: drop-shadow(0 6px 14px var(--accent-soft)); }
+.face .eye { transform-box: fill-box; transform-origin: center; animation: blink 5s infinite; }
+.face .antenna { animation: glow 2.4s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-3px); } }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes glow { 50% { opacity: 0.45; } }
+header h1 { margin: 0; font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.status { margin: 0; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; box-shadow: 0 0 0 0 var(--ok); animation: ping 2.2s infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+.spacer { flex: 1; }
+.ghost {
+  background: var(--bot); border: 1px solid var(--line); border-radius: 12px; padding: 7px 13px; font-size: 14px; font-weight: 500;
+  white-space: nowrap; transition: transform .2s, border-color .2s, color .2s, box-shadow .2s;
+}
+.ghost:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); box-shadow: 0 6px 18px var(--accent-soft); }
+.ghost .badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Transcript */
+main { flex: 1; overflow-y: auto; padding-block: 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+.row { display: flex; gap: 10px; align-items: flex-end; max-width: 90%; min-width: 0; animation: rise .38s cubic-bezier(.2,.8,.2,1) both; }
+.row.user { align-self: flex-end; flex-direction: row-reverse; animation-name: rise-r; }
+@keyframes rise { from { opacity: 0; transform: translate(-6px, 10px) scale(.98); } }
+@keyframes rise-r { from { opacity: 0; transform: translate(6px, 10px) scale(.98); } }
+.row .mini { width: 30px; height: 30px; flex: none; }
+.col { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.row.user .col { align-items: flex-end; }
+.bubble { padding: 11px 15px; border-radius: 18px; overflow-wrap: anywhere; min-width: 0; }
+.user .bubble { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); border-bottom-right-radius: 6px; font-weight: 500; box-shadow: 0 8px 24px var(--accent-soft); }
+.bot .bubble { background: var(--bot); border: 1px solid var(--line); border-bottom-left-radius: 6px; backdrop-filter: blur(8px); }
+.bubble p { margin: 0 0 8px; } .bubble p:last-child { margin-bottom: 0; }
+.bubble ul { margin: 4px 0 8px; padding-left: 20px; } .bubble ul:last-child { margin-bottom: 0; }
+.bubble li + li { margin-top: 3px; }
+.bubble li::marker { color: var(--accent); }
+.bubble strong { font-weight: 700; }
+.bubble.alert { background: var(--alert-soft); border-color: var(--alert); }
+.bubble.alert strong { color: var(--alert); }
+.more { display: none; }
+.bubble.open .more { display: block; animation: rise .3s both; }
+.toggle { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; font-size: 14px; margin-top: 6px; }
+.src { font-size: 12px; color: var(--muted); padding-inline: 4px; }
+.src b { font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent-soft); color: var(--accent);
+  border-radius: 99px; padding: 6px 13px; font-size: 13.5px; font-weight: 600; line-height: 1.3;
+  transition: transform .18s, background .18s, box-shadow .18s;
+}
+.chip:hover { transform: translateY(-2px); box-shadow: 0 6px 16px var(--accent-soft); background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.typing { display: inline-flex; gap: 5px; padding: 5px 2px; }
+.typing i { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); animation: hop 1.1s infinite ease-in-out; }
+.typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes hop { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-6px); opacity: 1; } }
+
+/* Hero (empty chat) */
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 18px 4px 6px; animation: rise .5s both; }
+.hero .big { width: 92px; height: 92px; animation: float 4s ease-in-out infinite; filter: drop-shadow(0 14px 30px var(--accent-soft)); }
+.hero h2 { margin: 0; font-family: var(--font-display); font-size: clamp(26px, 5vw, 36px); line-height: 1.15; letter-spacing: -0.03em; text-wrap: balance; }
+.hero h2 span { background: linear-gradient(100deg, var(--accent), var(--accent-2) 55%, var(--warm)); -webkit-background-clip: text; background-clip: text; color: transparent; background-size: 200% 100%; animation: sheen 6s ease-in-out infinite alternate; }
+@keyframes sheen { to { background-position: 100% 0; } }
+.hero p { margin: 0; color: var(--muted); max-width: 52ch; text-wrap: balance; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 620px; margin-top: 6px; }
+.card {
+  text-align: left; background: var(--bot); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px;
+  display: flex; gap: 11px; align-items: center; transition: transform .2s, border-color .2s, box-shadow .2s; animation: rise .5s both;
+}
+.card:nth-child(2) { animation-delay: .06s; } .card:nth-child(3) { animation-delay: .12s; } .card:nth-child(4) { animation-delay: .18s; }
+.card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 10px 26px var(--accent-soft); }
+.card .ic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.card .ic svg { width: 20px; height: 20px; }
+.card b { display: block; font-size: 14.5px; }
+.card small { color: var(--muted); font-size: 12.5px; }
+
+/* Visual results */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.gallery figure { margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-solid); animation: rise .45s both; }
+.gallery a { display: block; color: inherit; text-decoration: none; }
+.gallery img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; max-width: 100%; transition: transform .35s; background: var(--accent-soft); }
+.gallery a:hover img { transform: scale(1.05); }
+.gallery figcaption { font-size: 11.5px; color: var(--muted); padding: 6px 8px; line-height: 1.35; overflow-wrap: anywhere; }
+.gallery figcaption b { color: var(--ink); font-weight: 600; display: block; }
+.webimg { float: right; width: 112px; max-width: 40%; border-radius: 12px; margin: 2px 0 6px 12px; border: 1px solid var(--line); }
+
+.vcard { border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-solid); margin-top: 6px; animation: rise .5s both; }
+.vcard .top { padding: 16px 18px 14px; background: linear-gradient(120deg, var(--accent), var(--accent-2)); color: var(--accent-ink); position: relative; overflow: hidden; }
+.vcard .top::after { content: ""; position: absolute; width: 160px; height: 160px; right: -50px; top: -70px; border-radius: 50%; background: rgba(255,255,255,.18); animation: float 5s ease-in-out infinite; }
+.vcard .top small { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .85; font-weight: 700; }
+.vcard .top h3 { margin: 2px 0 4px; font-family: var(--font-display); font-size: 22px; letter-spacing: -0.02em; }
+.vcard .top p { margin: 0; font-size: 14px; opacity: .95; max-width: 60ch; }
+.vcard .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.vcard .cell { background: var(--panel-solid); padding: 12px 14px; min-width: 0; }
+.vcard .cell h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.vcard .cell h4 svg { width: 16px; height: 16px; color: var(--accent); }
+.vcard .cell.warn h4 svg { color: var(--warm); }
+.vcard .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.vcard .tags span { font-size: 12.5px; padding: 3px 9px; border-radius: 99px; background: var(--accent-soft); color: var(--ink); }
+.vcard .cell p { margin: 0; font-size: 13.5px; }
+.vcard .cell.full { grid-column: 1 / -1; }
+
+.vbadge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-left: 4px; }
+.vbadge.good { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.vbadge.mid { background: var(--warm-soft); color: var(--warm); }
+.vbadge.bad { background: var(--alert-soft); color: var(--alert); }
+
+/* Composer */
+.dock { border-top: 1px solid var(--line); }
+.suggest { display: flex; gap: 7px; overflow-x: auto; padding-block: 10px 0; scrollbar-width: none; }
+.suggest::-webkit-scrollbar { display: none; }
+.suggest .chip { flex: none; background: var(--bot); color: var(--ink); border-color: var(--line); font-weight: 500; }
+.suggest .chip:hover { color: var(--accent); border-color: var(--accent); }
+form { display: flex; gap: 8px; align-items: flex-end; padding-block: 10px; }
+.field { flex: 1; min-width: 0; position: relative; border-radius: 16px; padding: 1.5px; background: var(--line); transition: background .3s; }
+.field:focus-within { background: linear-gradient(120deg, var(--accent), var(--accent-2), var(--warm)); background-size: 200% 100%; animation: sheen 4s linear infinite alternate; }
+textarea {
+  display: block; width: 100%; resize: none; max-height: 120px; font: inherit; color: var(--ink);
+  background: var(--panel-solid); border: 0; border-radius: 14.5px; padding: 12px 15px; outline: none;
+}
+.send {
+  flex: none; width: 50px; height: 50px; border: 0; border-radius: 16px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
+  box-shadow: 0 8px 22px var(--accent-soft); transition: transform .18s, box-shadow .18s;
+}
+.send:hover { transform: translateY(-2px) rotate(-6deg); box-shadow: 0 12px 28px var(--accent-soft); }
+.send:active { transform: scale(.94); }
+.send svg { width: 21px; height: 21px; }
+.foot { margin: 0; padding-block: 0 calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 12px; color: var(--muted); }
+.foot b { color: var(--alert); }
+
+/* Drawers */
+.drawer {
+  position: absolute; inset: 0 0 0 auto; width: min(400px, 100%); background: var(--panel-solid);
+  border-left: 1px solid var(--line); display: flex; flex-direction: column;
+  transform: translateX(105%); transition: transform .35s cubic-bezier(.2,.8,.2,1); z-index: 5;
+  box-shadow: -18px 0 40px rgba(0,0,0,.18);
+}
+.drawer.open { transform: none; }
+.drawer header { display: flex; align-items: center; gap: 10px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.drawer h2 { margin: 0; font-family: var(--font-display); font-size: 18px; letter-spacing: -0.01em; }
+.drawer input {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 12px; padding: 9px 12px; outline: none; margin-block: 12px;
+}
+.drawer input:focus { border-color: var(--accent); }
+.tlist { flex: 1; overflow-y: auto; padding-bottom: 16px; }
+.tlist h3 { margin: 14px 0 4px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tlist > button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 7px 9px; border-radius: 10px; font-size: 15px; transition: background .15s, color .15s, padding .15s; }
+.tlist > button:hover { background: var(--accent-soft); color: var(--accent); padding-left: 14px; }
+.tlist .tag { font-size: 11px; color: var(--warm); background: var(--warm-soft); border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.count { font-size: 13px; color: var(--muted); }
+
+.mem-sum { display: flex; gap: 8px; flex-wrap: wrap; margin-block: 10px 4px; }
+.stat { background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat.warm { background: var(--warm-soft); color: var(--warm); }
+.mem-note { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.item { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; min-width: 0; background: var(--bot); }
+.item .q { font-weight: 600; overflow-wrap: anywhere; }
+.item .a { font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.item .meta { font-size: 12px; color: var(--muted); }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.acts button { background: none; border: 1px solid var(--line); border-radius: 9px; padding: 3px 10px; font-size: 13px; }
+.acts button:hover { border-color: var(--accent); color: var(--accent); }
+.acts .danger:hover { border-color: var(--alert); color: var(--alert); }
+.item textarea { width: 100%; font-size: 14px; max-height: none; min-height: 70px; border: 1px solid var(--line); }
+.pill { font-size: 11px; border-radius: 6px; padding: 1px 6px; margin-left: 4px; font-weight: 600; }
+.pill.ok { background: var(--accent-soft); color: var(--accent); }
+.pill.warn { background: var(--warm-soft); color: var(--warm); }
+.empty { font-size: 14px; color: var(--muted); padding: 4px 0 8px; }
+
+@media (max-width: 520px) {
+  .row { max-width: 96%; } .row .mini { display: none; }
+  .status span { display: none; }
+  .app > header { gap: 8px; } header h1 { font-size: 18px; } .face { width: 38px; height: 38px; }
+  .app > header .ghost { padding: 6px 9px; font-size: 13px; }
+  .cards { grid-template-columns: 1fr; }
+  .vcard .grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient>
+  </defs>
+  <symbol id="medi" viewBox="0 0 48 48">
+    <rect x="4" y="8" width="40" height="34" rx="14" fill="url(#mg)"/>
+    <rect x="21" y="1" width="6" height="9" rx="3" fill="url(#mg)"/>
+    <circle cx="24" cy="3" r="3.2" fill="var(--warm)"/>
+    <rect x="10" y="15" width="28" height="19" rx="9" fill="var(--panel-solid)"/>
+    <circle cx="18" cy="23" r="2.6" fill="var(--ink)"/>
+    <circle cx="30" cy="23" r="2.6" fill="var(--ink)"/>
+    <path d="M19 28.5q5 4 10 0" stroke="var(--ink)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pill" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="4" transform="rotate(-35 12 12)" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 8.2l5 7.6" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.2 8.5-7 10-3.8-1.5-7-5-7-10V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="10" r="2" fill="currentColor"/><path d="M4 18l5-5 4 4 3-3 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M8 14h4M8 17h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<div class="app">
+  <header class="gutter">
+    <svg class="face" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="4" y="8" width="40" height="34" rx="14" fill="url(#mg)"/>
+      <rect x="21" y="1" width="6" height="9" rx="3" fill="url(#mg)"/>
+      <circle class="antenna" cx="24" cy="3" r="3.2" fill="var(--warm)"/>
+      <rect x="10" y="15" width="28" height="19" rx="9" fill="var(--panel-solid)"/>
+      <circle class="eye" cx="18" cy="23" r="2.6" fill="var(--ink)"/>
+      <circle class="eye" cx="30" cy="23" r="2.6" fill="var(--ink)"/>
+      <path d="M19 28.5q5 4 10 0" stroke="var(--ink)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>MediBot</h1>
+      <p class="status"><i></i><span id="statusText">Online · works offline too</span></p>
+    </div>
+    <span class="spacer"></span>
+    <button class="ghost" id="browseBtn" type="button">Topics</button>
+    <button class="ghost" id="memBtn" type="button">Memory<span class="badge" id="memBadge" hidden></span></button>
+    <button class="ghost" id="newBtn" type="button">New</button>
+  </header>
+
+  <main class="gutter" id="log" aria-live="polite"></main>
+
+  <div class="dock">
+    <div class="suggest gutter" id="suggest"></div>
+    <form id="composer" class="gutter">
+      <div class="field"><textarea id="q" rows="1" placeholder="Ask a health question, or say hi…" aria-label="Message"></textarea></div>
+      <button class="send" type="submit" aria-label="Send">
+        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+      </button>
+    </form>
+    <p class="foot gutter">General health information, not a diagnosis. Emergency? Call <b>108</b> or <b>112</b>.</p>
+  </div>
+
+  <aside class="drawer" id="drawer" aria-label="All topics">
+    <header class="gutter">
+      <div>
+        <h2>All topics</h2>
+        <span class="count" id="topicCount"></span>
+      </div>
+      <span class="spacer"></span>
+      <button class="ghost" id="closeDrawer" type="button">Close</button>
+    </header>
+    <div class="gutter"><input id="filter" type="search" placeholder="Filter topics" aria-label="Filter topics"></div>
+    <div class="tlist gutter" id="tlist"></div>
+  </aside>
+
+  <aside class="drawer" id="memDrawer" aria-label="MediBot's memory">
+    <header class="gutter">
+      <div>
+        <h2>MediBot's memory</h2>
+        <span class="count" id="memState">Connecting…</span>
+      </div>
+      <span class="spacer"></span>
+      <button class="ghost" id="closeMem" type="button">Close</button>
+    </header>
+    <div class="tlist gutter" id="memList"></div>
+  </aside>
+</div>
+
+<script>
+(() => {
+"use strict";
+const KB = window.MEDIBOT_KB || { book: [], notes: [], aliases: {} };
+const $ = id => document.getElementById(id);
+const log = $("log"), q = $("q");
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+// ---------------- Knowledge base ----------------
+const SECTION_LABEL = {
+  definition: "What is it?", description: "More details", causes_symptoms: "Causes & symptoms",
+  diagnosis: "Diagnosis", treatment: "Treatment", alt_treatment: "Natural & alternative care",
+  prognosis: "Outlook", prevention: "Prevention", precautions: "Precautions",
+  side_effects: "Side effects", risks: "Risks", interactions: "Interactions", when: "When to see a doctor"
+};
+const CHIP_ORDER = ["causes_symptoms", "treatment", "prevention", "when", "diagnosis", "prognosis", "alt_treatment", "side_effects", "precautions", "risks", "description"];
+
+const topics = [];  // {t, s, src, names:[]}
+for (const e of KB.book) topics.push({ t: e.t, s: e.s, src: "book", names: [] });
+for (const e of KB.notes) topics.push({ t: e.t, s: e.s, src: "notes", names: e.k.slice() });
+const byTitle = new Map(topics.map(t => [t.t, t]));
+for (const [alias, target] of Object.entries(KB.aliases)) byTitle.get(target)?.names.push(alias);
+
+const norm = s => s.toLowerCase().replace(/[’`]/g, "'").replace(/'s\b/g, "").replace(/[^a-z0-9+]+/g, " ").trim();
+const stem = w => w.length > 4 && w.endsWith("ies") ? w.slice(0, -3) + "y"
+  : w.length > 4 && /(ses|xes|ches|shes)$/.test(w) ? w.slice(0, -2)
+  : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") && !w.endsWith("is") && !w.endsWith("us") ? w.slice(0, -1) : w;
+const stems = s => norm(s).split(" ").filter(Boolean).map(stem);
+
+const nameIndex = []; // {toks:[], str, topic}
+function addName(name, topic) {
+  const toks = stems(name);
+  if (!toks.length) return;
+  const str = toks.join(" ");
+  if (str.length < 2) return;
+  nameIndex.push({ toks, str, topic });
+}
+for (const t of topics) {
+  addName(t.t, t);
+  const paren = t.t.match(/^(.*?)\s*\((.+)\)$/);
+  if (paren) { addName(paren[1], t); addName(paren[2], t); }
+  const comma = t.t.match(/^([^,]+),\s*(.+)$/);
+  if (comma) addName(comma[2] + " " + comma[1], t);
+  if (/ and /.test(t.t) && t.src === "book") t.t.split(/ and /).forEach(p => p.length > 4 && addName(p, t));
+  t.names.forEach(n => addName(n, t));
+}
+
+function lev(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      best = Math.min(best, cur[j]);
+    }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+const GENERIC = new Set("disease disorder test drug syndrome infection pain cancer problem condition".split(" "));
+function findTopic(text) {
+  const Q = stems(text);
+  let best = null;
+  for (const n of nameIndex) {
+    const L = n.toks.length;
+    for (let i = 0; i + L <= Q.length; i++) {
+      let ok = true;
+      for (let j = 0; j < L; j++) if (Q[i + j] !== n.toks[j]) { ok = false; break; }
+      if (ok) {
+        const score = n.str.length + (L > 1 ? 4 : 0) + (n.topic.src === "notes" ? 0.5 : 0);
+        if (!best || score > best.score) best = { topic: n.topic, score, fuzzy: false };
+      }
+    }
+  }
+  if (best) return best;
+  // Fuzzy match for typos
+  for (const n of nameIndex) {
+    if (n.str.length < 5 || (n.toks.length === 1 && GENERIC.has(n.str))) continue;
+    const L = n.toks.length;
+    const max = n.str.length >= 8 ? 2 : 1;
+    for (let i = 0; i + L <= Q.length; i++) {
+      const cand = Q.slice(i, i + L).join(" ");
+      if (cand.length < 4) continue;
+      const d = lev(cand, n.str, max);
+      if (d <= max) {
+        const score = n.str.length - d * 3;
+        if (!best || score > best.score) best = { topic: n.topic, score, fuzzy: true };
+      }
+    }
+  }
+  return best;
+}
+
+// Full-text search for when no topic name is mentioned
+const STOP = new Set(("a an and are as at be by can could do does doing done for from get got had has have having he her his how i if in into is it its just me my of on or our she should so some tell that the their them then there these they this to too very was we what when where which who why will with would you your about any also give know like need please want much many more most other than been being feel feeling" +
+  " symptom sign cause treat treatment cure medicine prevent prevention diagnos diagnosis what" +
+  " health healthy good bad eat eating drink drinking body people person doctor normal make take use used year time day world life way thing help hurt hurting win won cup best better worse lose losing gain okay safe daily every really thing").split(" "));
+const docs = topics.map(t => stems(t.t + " " + t.t + " " + t.t + " " + (t.s.definition || "") + " " + (t.s.description || "").slice(0, 600) + " " + (t.s.causes_symptoms || "").slice(0, 900) + " " + t.names.join(" ")).filter(w => !STOP.has(w) && w.length > 2));
+const df = new Map(); let avgLen = 0;
+docs.forEach(d => { avgLen += d.length; new Set(d).forEach(w => df.set(w, (df.get(w) || 0) + 1)); });
+avgLen /= docs.length;
+const tfs = docs.map(d => { const m = new Map(); d.forEach(w => m.set(w, (m.get(w) || 0) + 1)); return m; });
+function searchTopics(text, k = 3) {
+  const words = [...new Set(stems(text).filter(w => !STOP.has(w) && w.length > 2))];
+  if (!words.length) return [];
+  const N = docs.length;
+  const scored = docs.map((d, i) => {
+    let s = 0;
+    for (const w of words) {
+      const f = tfs[i].get(w); if (!f) continue;
+      const idf = Math.log(1 + (N - df.get(w) + 0.5) / (df.get(w) + 0.5));
+      s += idf * f * 2.2 / (f + 1.2 * (0.25 + 0.75 * d.length / avgLen));
+    }
+    return [s, i];
+  }).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0]);
+  return scored.slice(0, k).map(([s, i]) => ({ topic: topics[i], score: s }));
+}
+
+// ---------------- Intents ----------------
+const ASPECTS = [
+  ["when", /\b(when (should|to|do) i (see|go|visit|call)|see a doctor|go to (the )?hospital|is it an emergency|should i worry|worried)\b/],
+  ["side_effects", /\bside ?effects?\b|\badverse\b/],
+  ["alt_treatment", /\b(home remed|natural|alternative|ayurved|herbal|homeopath|naturally)/],
+  ["prevention", /\b(prevent|avoid|protect|stop (it|getting)|vaccin|reduce (the )?risk)/],
+  ["diagnosis", /\b(diagnos|test(ed|s)? for|detect|how (do|can|will) (i|you|we) know|confirm|check for|identify)/],
+  ["treatment", /\b(treat|cure|medicin|medication|drug for|remed|manag|get rid|heal|what (should|can|do) i do|therapy|relief|reliev|fix|tablet|pill)/],
+  ["causes_symptoms", /\b(symptom|signs?\b|cause|why (do|does|did)|reason|how (do|does) (you|i|it|one|people) (get|catch|spread)|spread|catch|contagious|risk factor|trigger)/],
+  ["prognosis", /\b(prognos|outlook|serious|dangerous|fatal|deadly|life expect|recover|curable|go away|how long|permanent)/],
+  ["precautions", /\b(precaution|safe|careful)/],
+  ["description", /\b(more detail|in detail|explain more|elaborate|types? of|kinds? of|more info)/],
+];
+function detectAspect(text) {
+  const t = norm(text);
+  for (const [a, re] of ASPECTS) if (re.test(t)) return a;
+  return null;
+}
+const FALLBACK = {
+  causes_symptoms: ["description"], prognosis: ["description"], alt_treatment: ["treatment"],
+  precautions: ["risks", "side_effects", "when"], side_effects: ["risks", "precautions"], risks: ["precautions", "side_effects"],
+  when: [], diagnosis: ["description"], prevention: [], treatment: [], description: ["causes_symptoms"]
+};
+
+const SMALL = [
+  { id: "selfharm", re: /\b(suicid|kill (myself|me)|end (my|it all)|end my life|self ?harm|hurt myself|cut myself|want to die|dont want to live|don t want to live|no reason to live)/ },
+  { id: "greet", re: /^(h+i+|h+e+y+|h+e+l+o+|helo|hai+|hlo|hola|namaste|namaskaram|yo|sup|hy|hiya|howdy|greetings|good (morning|afternoon|evening|day)|morning|evening)( (there|bot|medibot|buddy|friend|bro|dude))?\b/ },
+  { id: "howareyou", re: /\b(how (are|r) (you|u|ya)|how s it going|how is it going|how do you do|what s up|whats up|wassup|sup|how have you been|how are things|how is your day|how s your day)\b/ },
+  { id: "name_set", re: /\b(?:my name is|my name s|call me|you can call me)\s+([a-z]+)/ },
+  { id: "name_get", re: /\bwhat (is|s) my name\b|\bdo you (know|remember) my name\b/ },
+  { id: "who", re: /\b(what (is|s) your name|who (are|r) (you|u)|what are you|your name|are you (a )?(bot|robot|human|ai|real|person|doctor))\b/ },
+  { id: "creator", re: /\b(who (made|created|built|designed|programmed) you|who is your (creator|maker|owner))\b/ },
+  { id: "help", re: /^(help|menu|options|start)$|\b(what can you do|how can you help|what do you (know|do)|how (do|does) (this|it|you) work|what topics|list (of )?topics|show topics|all topics|what can i ask)\b/ },
+  { id: "teach", re: /^(teach|teach you|teach you something|i want to teach you|i wanna teach you|can i teach you|let me teach you|learn this|learn something new|i ll teach you)( something)?$/ },
+  { id: "wrong", re: /^(no )?(that s wrong|thats wrong|that is wrong|wrong|incorrect|not correct|that s not right|thats not right|that is not right|wrong answer|bad answer|that s incorrect|you re wrong|you are wrong)$/ },
+  { id: "yes", re: /^(yes+|yeah|yep|yup|ya|yah|sure|ok sure|okay sure|please|yes please|go on|go ahead|continue|tell me more|more|ok tell me|of course|definitely|why not|yes that s it|that s it|thats it|exactly|correct|yes exactly|yes correct)$/ },
+  { id: "no", re: /^(no+|nope|nah|no thanks|no thank you|not now|its ok|it s ok|nothing|that s all|thats all|all good)$/ },
+  { id: "thanks", re: /\b(thanks|thank you|thank u|thankyou|thx|tnx|ty|tysm|thanks a lot|nandi|much appreciated)\b/ },
+  { id: "bye", re: /^(ok |okay )?(bye+|goodbye|good bye|see (you|ya)|cya|good night|gn|take care|tata|catch you later|later|im leaving|i m leaving|gotta go)\b/ },
+  { id: "joke", re: /\b(joke|make me laugh|something funny|cheer me up)\b/ },
+  { id: "compliment", re: /\b(good (bot|job)|well done|you (are|re|r) (so )?(good|great|awesome|smart|nice|cool|helpful|the best|amazing|cute|clever|brilliant)|love you|i like you|you rock|nice bot|great bot)\b/ },
+  { id: "insult", re: /\b(you (are|re|r) (so )?(dumb|stupid|useless|bad|boring|slow|annoying|idiot)|bad bot|stupid bot|shut up|you suck)\b/ },
+  { id: "time", re: /\b(what (time|day) is it|what s the time|current time|today s date|what is the date|what day is today|what is today)\b/ },
+  { id: "feel_good", re: /^(i m |i am |im |am |feeling |i feel |i m doing |i am doing |doing )(good|fine|great|ok|okay|alright|all right|well|awesome|not bad|pretty good|doing (good|well|great|fine)|very good|super|fantastic|happy)( thanks| thank you| thx| too| and you| how about you| you)*$/ },
+  { id: "feel_good_short", re: /^(good|fine|great|ok|okay|alright|all right|well|awesome|not bad|pretty good|very good|super|fantastic|happy)( thanks| thank you| thx| and you| how about you| you)*$/ },
+  { id: "feel_bad", re: /^(i m |i am |im |am |i feel |feeling |i m feeling |i am feeling |im feeling )?(not (feeling )?(so |very |too )?(good|well|fine|great|ok|okay)|(feeling )?(sick|unwell|ill|bad|terrible|awful|horrible|tired|exhausted|weak|dizzy|under the weather))( today| now| at all)?$/ },
+  { id: "feel_sad", re: /\b(i m|i am|im|feeling|i feel) (so |very |really )?(sad|down|lonely|depressed|upset|anxious|worried|scared|stressed|hopeless|low)\b/ },
+  { id: "laugh", re: /^(lol+|haha+|hehe+|lmao|rofl|xd|ha+)$/ },
+  { id: "ack", re: /^(ok+|okay|k+|cool|nice|great|alright|got it|i see|hmm+|oh+|ah+|wow|awesome|interesting|good|noted|right|fine)$/ },
+];
+
+const EMERGENCY = /\b(chest pain|chest tight|pain in (my|his|her) chest|can t breathe|cant breathe|cannot breathe|trouble breathing|difficulty breathing|not breathing|stopped breathing|choking|unconscious|passed out|fainted|collapsed|won t wake|seizure|having fits|convulsion|heavy bleeding|bleeding (a lot|heavily|won t stop|wont stop|doesn t stop)|face (is )?drooping|slurred speech|sudden numbness|overdose|swallowed poison|poisoned|drank poison|snake ?bite|bitten by a snake|severe allergic|throat (is )?swelling|anaphylaxis|heart attack|stroke)\b/;
+const PERSONAL = /\b(i|i m|im|my|me|he|she|someone|somebody|we|mom|dad|mother|father|friend|grandma|grandpa|grandmother|grandfather|brother|sister|son|daughter|baby|child|having|is having)\b/;
+const QUESTIONY = /^(what|whats|what s|define|explain|tell me about|describe|how (to|do|can|is)|why|is|are|can|symptoms? of|signs? of|causes? of|treatment for|prevent)/;
+
+// ---------------- State ----------------
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+let userName = store.get("medibot.name") || "";
+let lastTopic = null;          // topic object
+let pending = null;            // {topic, section} offered with "want to know..."
+let shown = new Set();         // sections shown for lastTopic
+let askedHow = false;          // last reply asked "how are you feeling?"
+let teach = null;              // {stage: "q"|"a", q}
+let guess = null;              // {q, topic} when MediBot guessed a topic from search
+let lastQ = "";                // last question MediBot answered (for "that's wrong")
+
+// ---------------- Online memory (shared database) ----------------
+const mem = { db: null, isOwner: false, canEdit: false, uid: null, canWrite: null, learned: new Map(), aliases: new Map(), misses: [], ready: false };
+const LSTOP = new Set("a an and are as at be by can could do does for from had has have how i if in into is it its me my of on or our please should so tell that the their them then there these they this to too was we what when where which who why will with would you your about know".split(" "));
+const keyOf = s => stems(s).filter(w => !LSTOP.has(w)).join(" ") || norm(s);
+const fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); };
+const docId = key => "k" + fnv(key) + "-" + (key.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "x");
+
+function findLearned(text) {
+  const k = keyOf(text);
+  if (!k || !mem.learned.size) return null;
+  const exact = mem.learned.get(k);
+  if (exact) return { e: exact, exact: true };
+  const A = new Set(k.split(" "));
+  let best = null;
+  for (const e of mem.learned.values()) {
+    const B = new Set(e.key.split(" "));
+    let inter = 0; A.forEach(w => { if (B.has(w)) inter++; });
+    const j = inter / (A.size + B.size - inter);
+    if (j >= 0.6 && (!best || j > best.j)) best = { e, j };
+  }
+  return best && { e: best.e, exact: false };
+}
+function memError(e) {
+  const c = String(e?.code || "");
+  if (c.includes("resource-exhausted") || c.includes("quota")) return "My memory database has hit its free daily limit. Please try again tomorrow.";
+  if (c.includes("permission-denied")) return "I couldn't save that. Either the owner has already approved an answer for this question (only they can change it), or the database rules aren't set up yet.";
+  if (c.includes("unavailable") || !navigator.onLine) return "I can't reach my memory right now. Check your internet connection and try again.";
+  return "I couldn't save that just now. Please try again in a moment.";
+}
+async function saveLearned(q, a, web) {
+  const key = keyOf(q);
+  const body = { q: q.slice(0, 300), key: key.slice(0, 300), a: a.slice(0, 2000), at: Date.now(), verified: !!mem.isOwner, src: mem.isOwner ? "owner" : "user" };
+  if (web) body.web = web;
+  await mem.db.collection("learned").doc(docId(key)).set(body);
+  mem.learned.set(key, { ...body, id: docId(key) });
+  mem.db.collection("misses").doc(docId(key)).delete().catch(() => {});
+  renderMemory();
+}
+function saveAlias(q, topic) {
+  const key = keyOf(q);
+  if (!mem.db || !key || key.split(" ").length > 8 || mem.aliases.get(key)?.topic === topic.t) return;
+  const body = { phrase: q.slice(0, 200), key: key.slice(0, 300), topic: topic.t, at: Date.now() };
+  mem.aliases.set(key, { ...body, id: docId(key) });
+  mem.db.collection("aliases").doc(docId(key)).set(body).catch(() => {});
+}
+function logMiss(q) {
+  const key = keyOf(q);
+  if (!mem.db || !key || key.length < 3) return;
+  mem.db.collection("misses").doc(docId(key)).set({ q: q.slice(0, 300), key: key.slice(0, 300), at: Date.now() }).catch(() => {});
+}
+function answerLearned(e, prefix = "") {
+  lastTopic = null; pending = null;
+  addBot({
+    text: prefix + pick(["Here's what I've learned:", "I learned this from an earlier chat:", "Someone taught me this:"]) + "\n\n" + e.a,
+    src: (e.verified ? "Source: <b>Learned</b> · taught by MediBot's owner" : "Source: <b>Learned from a user</b> · not checked by a doctor") + webBadge(e),
+    chips: [{ label: "That's wrong" }]
+  });
+}
+function startTeach(q) {
+  if (!mem.db) { addBot({ text: mem.setup === false ? "My memory database isn't set up yet, so I can't learn new things. The setup guide (README) explains how to connect a free Firebase database 😊" : "I need internet to learn new things, and I can't reach my memory right now. I still remember everything I learned before! 😅" }); return; }
+  if (q) { teach = { stage: "a", q }; addBot({ text: `Yay, I love learning! 🧠 What should I say when someone asks **“${q}”**?\n\nType the answer below, or say *cancel*.`, chips: [{ label: "Cancel" }] }); }
+  else { teach = { stage: "q" }; addBot({ text: "Sure, teach me something! 🧠 First, what's the **question**?", chips: [{ label: "Cancel" }] }); }
+}
+async function handleTeach(raw, m) {
+  if (/^(cancel|skip|stop|never ?mind|forget it|no|nope|leave it)$/.test(m)) { teach = null; addBot({ text: "No problem, cancelled! 😊" }); return; }
+  if (teach.stage === "q") { teach = { stage: "a", q: raw.trim() }; addBot({ text: `Got it. And what should I answer to **“${teach.q}”**?`, chips: [{ label: "Cancel" }] }); return; }
+  const q = teach.q; teach = null;
+  try {
+    await saveLearned(q, raw.trim());
+    addBot({ text: pick([`Thank you! 🎉 I've learned that. Next time anyone asks “${q}”, I'll know what to say.`, `Got it, saved to my memory! 🧠 I'll remember that for everyone.`]) + (mem.isOwner ? "" : "\n\nSince you're not the owner, I'll mark it as *not checked by a doctor* until the owner approves it.") });
+  } catch (e) { addBot({ text: memError(e) }); return; }
+  await selfCheck(q, raw.trim());
+}
+
+// ---------------- Internet helpers (Wikipedia + Wikimedia Commons, free, no keys) ----------------
+async function getJSON(url, ms = 9000) {
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), ms);
+  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error("HTTP " + r.status); return await r.json(); }
+  finally { clearTimeout(tm); }
+}
+const WIKI = "https://en.wikipedia.org/w/api.php?";
+const wikiSearch = (q, n = 5) => getJSON(WIKI + new URLSearchParams({ action: "query", list: "search", srsearch: q, srlimit: String(n), format: "json", origin: "*" })).then(j => j.query?.search || []);
+async function wikiSummary(title) {
+  const j = await getJSON("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(title.replace(/ /g, "_")));
+  return { title: j.title, extract: j.extract || "", type: j.type, image: j.originalimage?.source || j.thumbnail?.source || "", thumb: j.thumbnail?.source || "", url: j.content_urls?.desktop?.page || ("https://en.wikipedia.org/wiki/" + encodeURIComponent(title)) };
+}
+const contentWords = s => [...new Set(stems(s).filter(w => !STOP.has(w) && !LSTOP.has(w) && w.length > 2))];
+async function wikiAnswer(q) {
+  const words = contentWords(q);
+  if (!words.length) return null;
+  const hits = await wikiSearch(q, 5);
+  const need = Math.min(2, words.length);
+  const hit = hits.find(h => { const t = new Set(stems(h.title + " " + h.snippet.replace(/<[^>]+>/g, " "))); return words.filter(w => t.has(w)).length >= need; });
+  if (!hit) return null;
+  const sum = await wikiSummary(hit.title);
+  if (!sum.extract || sum.type === "disambiguation") return null;
+  return sum;
+}
+function showWikiAnswer(w, q, prefix = "") {
+  lastTopic = null; pending = null;
+  const chips = [];
+  if (mem.db) chips.push({ label: "Save to memory 🧠", act: async () => {
+    try { await saveLearned(q, w.extract.slice(0, 1700) + `\n\n(From Wikipedia: ${w.title})`, { status: "source", score: 1, src: w.title, n: 0, m: 0, at: Date.now() }); addBot({ text: "Saved! 🧠 Next time anyone asks this, I'll answer straight away." }); }
+    catch (e) { addBot({ text: memError(e) }); }
+  } });
+  chips.push({ label: "Show pictures", say: `Show pictures of ${w.title}` });
+  if (mem.db) chips.push({ label: "Teach me instead", act: () => { addUser("Teach me instead"); startTeach(q); } });
+  addBot({
+    text: prefix + pick(["That wasn't in my notes, so I looked it up on Wikipedia 🌐", "I checked Wikipedia for you 🌐", "Here's what Wikipedia says 🌐"]) + `\n\n**${w.title}**\n\n` + w.extract,
+    extra: w.thumb ? `<img class="webimg" src="${esc(w.thumb)}" alt="${esc(w.title)}" loading="lazy">` : "",
+    src: `Source: <a href="${esc(w.url)}" target="_blank" rel="noopener">Wikipedia · ${esc(w.title)}</a> · not reviewed by a doctor`,
+    chips
+  });
+}
+
+const VISUAL_RE = /\b(picture|pictures|pic|pics|image|images|photo|photos|diagram|diagrams|illustration|illustrations|visual|visuals|visuali[sz]e|infographic|chart|look like|looks like|draw|summary card)\b/;
+const PIC_RE = /\b(picture|pictures|pic|pics|image|images|photo|photos|diagram|diagrams|illustration|illustrations|look like|looks like|draw)\b/;
+const CARD_RE = /\b(visual summary|summary card|infographic|visuali[sz]e|chart|card|visual|visuals)\b/;
+const VISUAL_STRIP = /\b(show|me|us|a|an|the|of|for|some|any|few|picture|pictures|pic|pics|image|images|photo|photos|diagram|diagrams|illustration|illustrations|visual|visuals|visuali[sz]e|infographic|chart|summary|card|what|does|do|did|look|looks|like|draw|can|could|you|please|i|want|to|see|give|get|find|make|create|how)\b/g;
+const UNSAFE_IMG = /\b(nude|naked|nudity|sex|sexual|penis|vagina|vulva|genital|genitals|porn|erotic|corpse|cadaver|gore|dead body)\b/i;
+
+async function commonsImages(q, n = 10) {
+  const j = await getJSON("https://commons.wikimedia.org/w/api.php?" + new URLSearchParams({
+    action: "query", format: "json", origin: "*", generator: "search", gsrsearch: q, gsrnamespace: "6", gsrlimit: String(n),
+    prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "480"
+  }));
+  const strip = v => String(v || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return Object.values(j.query?.pages || {}).sort((a, b) => (a.index || 0) - (b.index || 0)).map(p => {
+    const ii = p.imageinfo?.[0]; if (!ii || !/^image\/(jpeg|png|gif|webp|svg\+xml)$/.test(ii.mime || "")) return null;
+    const m = ii.extmetadata || {};
+    const title = strip(m.ObjectName?.value) || p.title.replace(/^File:/, "").replace(/\.\w+$/, "");
+    const desc = strip(m.ImageDescription?.value);
+    if (UNSAFE_IMG.test(title + " " + desc + " " + strip(m.Categories?.value))) return null;
+    return { thumb: ii.thumburl || ii.url, page: ii.descriptionurl, title, author: strip(m.Artist?.value).slice(0, 50), license: strip(m.LicenseShortName?.value) };
+  }).filter(Boolean);
+}
+async function showPictures(subject, diagram, topic, prefix = "") {
+  if (!navigator.onLine) {
+    if (topic) return visualCard(topic, prefix + "I'm offline, so I can't fetch photos right now. Here's a visual summary instead.\n\n");
+    addBot({ text: prefix + "I need internet to find pictures, and I'm offline right now 😅" }); return;
+  }
+  const [lead, more] = await Promise.all([
+    wikiSummary(subject).catch(() => null),
+    commonsImages(subject + (diagram ? " diagram" : ""), 12).catch(() => [])
+  ]);
+  const imgs = [];
+  if (lead?.image && lead.type !== "disambiguation" && !UNSAFE_IMG.test(lead.title)) imgs.push({ thumb: lead.thumb || lead.image, page: lead.url, title: lead.title, author: "Main image of the Wikipedia article", license: "" });
+  for (const c of more) if (imgs.length < 6 && !imgs.some(i => i.thumb === c.thumb)) imgs.push(c);
+  if (imgs.length === 5 || imgs.length === 3) imgs.pop();
+  const chips = topic ? [{ label: "Visual summary", say: `Visual summary of ${chipName(topic.t)}` }, { label: `What is ${chipName(topic.t)}?` }] : [];
+  if (!imgs.length) { addBot({ text: prefix + `I couldn't find good pictures of **${subject}** right now 😕 Try different words, like *“${subject} diagram”*.`, chips }); return; }
+  addBot({
+    text: prefix + pick([`Here are some pictures of **${subject}** 🖼️`, `I found these images of **${subject}** 🖼️`, `Here's what **${subject}** looks like 🖼️`]),
+    extra: `<div class="gallery">${imgs.map((i, n) => `<figure style="animation-delay:${n * 0.06}s"><a href="${esc(i.page)}" target="_blank" rel="noopener"><img src="${esc(i.thumb)}" alt="${esc(i.title)}" loading="lazy"><figcaption><b>${esc(i.title.slice(0, 70))}</b>${esc([i.author, i.license].filter(Boolean).join(" · ").slice(0, 90))}</figcaption></a></figure>`).join("")}</div>`,
+    src: "Images from <b>Wikimedia Commons</b> and <b>Wikipedia</b>. Tap one to see its source and licence. Medical photos can be graphic.",
+    chips
+  });
+}
+
+// Visual summary card, built from the topic's own text (works offline)
+function firstSentences(text, max = 220) {
+  if (!text) return "";
+  const t = text.replace(/\n+/g, " ").replace(/•\s*/g, "");
+  let out = "";
+  for (const s of t.match(/[^.!?]+[.!?]+/g) || [t]) { if (s.trim().length < 15) continue; if ((out + s).length > max && out) break; out += s; }
+  return out.trim().slice(0, max + 40);
+}
+function listFrom(text, max = 8, generic = false, bulletsOk = true) {
+  if (!text) return [];
+  const bullets = text.split("\n").filter(l => /^•/.test(l.trim())).map(l => l.replace(/^•\s*/, "").split(/[.:;(]| - /)[0].trim());
+  if (bulletsOk && bullets.length >= 2) return bullets.filter(b => b.length > 2 && b.length < 60).slice(0, max);
+  const m = text.match(/(?:symptoms|signs|warning signs)[^.:]{0,60}?(?:include|includes|are|:)\s*([^.]+)\./i) || (generic && text.match(/(?:include|includes|such as)\s+([^.]+)\./i));
+  if (!m) return [];
+  return m[1].split(/,\s*|;\s*|\s+and\s+|\s+or\s+/).map(x => x.replace(/^(and|or|a|an)\s+/i, "").replace(/\s*\(.*$/, "").trim()).filter(x => x.length > 2 && x.length < 48).slice(0, max);
+}
+function visualCard(topic, prefix = "") {
+  lastTopic = topic;
+  const s = topic.s, name = shortName(topic.t);
+  const what = firstSentences(s.definition, 240);
+  const curated = topic.src === "notes";
+  const signs = listFrom(s.causes_symptoms, 8, false, curated).length ? listFrom(s.causes_symptoms, 8, false, curated) : listFrom(s.description, 8, false, curated);
+  const helps = curated ? listFrom(s.treatment, 6) : [];
+  const helpText = helps.length ? "" : firstSentences(s.treatment, 200);
+  const prevent = firstSentences(s.prevention, 180);
+  const doctor = firstSentences(s.when, 200) || "Symptoms are severe, getting worse or not improving. In an emergency call 108 or 112.";
+  const cell = (ic, title, body, cls = "") => `<div class="cell ${cls}"><h4><svg aria-hidden="true"><use href="#${ic}"/></svg>${esc(title)}</h4>${body}</div>`;
+  const tags = arr => `<div class="tags">${arr.map(x => `<span>${esc(x)}</span>`).join("")}</div>`;
+  const cells = [];
+  if (signs.length) cells.push(cell("i-pulse", "Common signs", tags(signs)));
+  else if (s.causes_symptoms) {
+    const symSentence = (s.causes_symptoms.replace(/\n+/g, " ").match(/[^.!?]*\bsymptom[^.!?]*[.!?]/i) || [])[0];
+    cells.push(cell("i-pulse", symSentence ? "Signs & symptoms" : "Causes", `<p>${esc((symSentence || firstSentences(s.causes_symptoms, 200)).trim().slice(0, 260))}</p>`));
+  }
+  if (helps.length || helpText) cells.push(cell("i-pill", "What helps", helps.length ? tags(helps) : `<p>${esc(helpText)}</p>`));
+  if (prevent) cells.push(cell("i-shield", "Prevention", `<p>${esc(prevent)}</p>`));
+  cells.push(cell("i-alert", "See a doctor if", `<p>${esc(doctor)}</p>`, "warn"));
+  if (cells.length % 2 === 1) cells[cells.length - 1] = cells[cells.length - 1].replace('class="cell ', 'class="cell full ');
+  addBot({
+    text: prefix + pick([`Here's a visual summary of **${name}** ✨`, `**${name}** at a glance ✨`]),
+    extra: `<div class="vcard"><div class="top"><small>Visual summary</small><h3>${esc(name)}</h3><p>${esc(what)}</p></div><div class="grid">${cells.join("")}</div></div>`,
+    src: SRC[topic.src],
+    chips: [...(navigator.onLine ? [{ label: "Show pictures", say: `Show pictures of ${chipName(topic.t)}` }] : []), { label: `Symptoms of ${chipName(topic.t)}` }, { label: `Treatment for ${chipName(topic.t)}` }]
+  });
+}
+
+// Self-check: compare a taught answer's key words with the matching Wikipedia article
+async function verifyAnswer(q, a) {
+  const aw = contentWords(a).filter(w => w.length > 3);
+  const base = { status: "unconfirmed", score: 0, src: "", n: aw.length, m: 0, at: Date.now() };
+  if (aw.length < 3) return { ...base, status: "short" };
+  const hits = await wikiSearch(keyOf(q) || q, 3);
+  for (const h of hits.slice(0, 2)) {
+    const j = await getJSON(WIKI + new URLSearchParams({ action: "query", prop: "extracts", explaintext: "1", redirects: "1", titles: h.title, format: "json", origin: "*" }));
+    const txt = Object.values(j.query?.pages || {})[0]?.extract || "";
+    const set = new Set(stems(txt));
+    const m = aw.filter(w => set.has(w)).length;
+    const score = Math.round((m / aw.length) * 100) / 100;
+    if (score > base.score || !base.src) Object.assign(base, { score, src: h.title, m });
+  }
+  base.status = base.score >= 0.6 ? "supported" : base.score >= 0.35 ? "partial" : "unconfirmed";
+  return base;
+}
+async function selfCheck(q, a) {
+  if (!navigator.onLine || !mem.db) return;
+  let v;
+  try { v = await verifyAnswer(q, a); } catch { addBot({ text: "I tried to double-check that on Wikipedia but couldn't reach it. I'll keep it saved as *unconfirmed* for now." }); return; }
+  mem.db.collection("learned").doc(docId(keyOf(q))).update({ web: v }).catch(() => {});
+  const where = v.src ? `Wikipedia's article on **${v.src}**` : "Wikipedia";
+  const msg = {
+    supported: `✅ I double-checked online: **${v.m} of ${v.n}** key words in that answer appear in ${where}. It looks consistent!`,
+    partial: `🟡 I double-checked online: only **${v.m} of ${v.n}** key words appear in ${where}. I've saved it as *partly confirmed* so the owner can take a look.`,
+    unconfirmed: `⚠️ I couldn't confirm this on Wikipedia${v.src ? ` (I checked **${v.src}**)` : ""}. It's saved but marked *unconfirmed*, so the owner can review it.`,
+    short: "That answer is very short, so I couldn't double-check it online. It's saved as *not checked*."
+  }[v.status];
+  addBot({ text: msg + "\n\nThis is a key-word check against Wikipedia, so it can't catch every mistake.", src: v.src ? `Checked against <a href="https://en.wikipedia.org/wiki/${encodeURIComponent(v.src.replace(/ /g, "_"))}" target="_blank" rel="noopener">Wikipedia · ${esc(v.src)}</a>` : "" });
+}
+function webBadge(e) {
+  const w = e.web; if (!w || !w.status) return "";
+  const map = { supported: ["good", "✓ matches Wikipedia"], source: ["good", "from Wikipedia"], partial: ["mid", "partly confirmed"], unconfirmed: ["bad", "couldn't confirm online"], short: ["mid", "too short to check"] };
+  const [cls, label] = map[w.status] || ["mid", w.status];
+  return ` <span class="vbadge ${cls}" title="${esc(w.src ? "Checked against Wikipedia: " + w.src : "")}">${esc(label)}</span>`;
+}
+
+// ---------------- Rendering ----------------
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function fmt(text) {
+  // **bold**, paragraphs, "• " bullets
+  const blocks = text.split(/\n{2,}/);
+  return blocks.map(b => {
+    const lines = b.split("\n");
+    let html = "", list = [];
+    const flush = () => { if (list.length) { html += "<ul>" + list.map(l => `<li>${l}</li>`).join("") + "</ul>"; list = []; } };
+    for (const raw of lines) {
+      const l = esc(raw.trim()).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>");
+      if (!l) continue;
+      if (/^•/.test(l)) list.push(l.replace(/^•\s*/, ""));
+      else { flush(); html += `<p>${l}</p>`; }
+    }
+    flush();
+    return html;
+  }).join("");
+}
+function scrollDown() { log.scrollTop = log.scrollHeight; }
+function addUser(text) {
+  document.querySelector(".hero")?.remove();
+  const row = document.createElement("div");
+  row.className = "row user";
+  row.innerHTML = `<div class="col"><div class="bubble">${esc(text)}</div></div>`;
+  log.appendChild(row); scrollDown();
+}
+function addBot({ text, more = "", chips = [], src = "", alert = false, extra = "" }) {
+  const row = document.createElement("div");
+  row.className = "row bot";
+  row.innerHTML = `<svg class="mini" aria-hidden="true"><use href="#medi"/></svg><div class="col"></div>`;
+  const col = row.querySelector(".col");
+  const bubble = document.createElement("div");
+  bubble.className = "bubble" + (alert ? " alert" : "");
+  bubble.innerHTML = fmt(text);
+  if (more) {
+    const m = document.createElement("div"); m.className = "more"; m.innerHTML = fmt(more);
+    const b = document.createElement("button"); b.type = "button"; b.className = "toggle"; b.textContent = "Read more";
+    b.onclick = () => { bubble.classList.toggle("open"); b.textContent = bubble.classList.contains("open") ? "Show less" : "Read more"; };
+    bubble.append(m, b);
+  }
+  if (extra) bubble.insertAdjacentHTML("beforeend", extra);
+  col.appendChild(bubble);
+  if (src) { const s = document.createElement("span"); s.className = "src"; s.innerHTML = src; col.appendChild(s); }
+  if (chips.length) {
+    const c = document.createElement("div"); c.className = "chips";
+    for (const ch of chips) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "chip";
+      b.textContent = ch.label; b.onclick = ch.act ? () => { if (!busy) ch.act(); } : () => send(ch.say || ch.label);
+      c.appendChild(b);
+    }
+    col.appendChild(c);
+  }
+  log.appendChild(row);
+  if (typingRow && typingRow.isConnected) log.appendChild(typingRow);
+  scrollDown();
+  return row;
+}
+let typingRow = null;
+function typing() {
+  const row = document.createElement("div");
+  typingRow = row;
+  row.className = "row bot";
+  row.innerHTML = `<svg class="mini" aria-hidden="true"><use href="#medi"/></svg><div class="col"><div class="bubble"><span class="typing"><i></i><i></i><i></i></span></div></div>`;
+  log.appendChild(row); scrollDown();
+  return row;
+}
+
+// ---------------- Answer building ----------------
+const SRC = {
+  book: "Source: <b>Gale Encyclopedia of Medicine</b>, Vol. 1",
+  notes: "Source: <b>MediBot quick notes</b> (general health guidance)"
+};
+const OPENERS = {
+  definition: ["Sure! Here's a quick overview of **{t}**.", "Good question! Here's what **{t}** is.", "Happy to explain **{t}**.", "Here's what I know about **{t}**."],
+  description: ["Here are some more details on **{t}**.", "Let's go a bit deeper into **{t}**."],
+  causes_symptoms: ["Here are the causes and symptoms of **{t}**.", "Let's look at what causes **{t}** and how it shows up."],
+  diagnosis: ["Here's how **{t}** is diagnosed.", "This is how doctors check for **{t}**."],
+  treatment: ["Here's how **{t}** is usually treated.", "Let's talk treatment for **{t}**."],
+  alt_treatment: ["Here are some natural and alternative approaches for **{t}**. Check with a doctor before trying them."],
+  prognosis: ["Here's the general outlook for **{t}**."],
+  prevention: ["Here's how to lower your risk of **{t}**.", "Prevention tips for **{t}**:"],
+  precautions: ["Some precautions for **{t}**:"],
+  side_effects: ["Possible side effects of **{t}**:"],
+  risks: ["Risks to know about **{t}**:"],
+  interactions: ["Interactions to know about for **{t}**:"],
+  when: ["Here's when to get medical help for **{t}**."]
+};
+const CHIP_TEXT = {
+  causes_symptoms: t => `Symptoms of ${t}`, treatment: t => `Treatment for ${t}`, prevention: t => `How to prevent ${t}`,
+  when: t => `When to see a doctor`, diagnosis: t => `How is ${t} diagnosed?`, prognosis: t => `Outlook for ${t}`,
+  alt_treatment: t => `Natural remedies`, side_effects: t => `Side effects`, precautions: t => `Precautions`,
+  risks: t => `Risks`, description: t => `More details`, definition: t => `What is ${t}?`
+};
+const shortName = t => { const m = t.match(/^(.*?)\s*\(([A-Z0-9-]{2,6})\)$/); return m ? m[2] : t.replace(/\s*\(.+\)$/, ""); };
+const chipName = t => { const n = shortName(t); return /^[A-Z][a-z]/.test(n) && !/[’']|[A-Z]/.test(n.slice(1)) ? n.toLowerCase() : n; };
+
+function split(text, limit = 650) {
+  const paras = text.split(/\n{2,}/);
+  let head = "", i = 0;
+  while (i < paras.length && (head.length === 0 || head.length + paras[i].length < limit)) { head += (head ? "\n\n" : "") + paras[i]; i++; }
+  let rest = paras.slice(i).join("\n\n");
+  if (head.length > limit * 1.6 && !head.includes("•")) {
+    const cut = head.lastIndexOf(". ", limit);
+    if (cut > limit * 0.5) { rest = head.slice(cut + 2) + (rest ? "\n\n" + rest : ""); head = head.slice(0, cut + 1); }
+  }
+  return [head, rest];
+}
+
+function answerTopic(topic, aspect, opts = {}) {
+  aspect = aspect || "definition";
+  let section = aspect, text = topic.s[aspect];
+  if (!text) for (const f of FALLBACK[aspect] || []) if (topic.s[f]) { section = f; text = topic.s[f]; break; }
+  if (topic !== lastTopic) shown = new Set();
+  lastTopic = topic;
+
+  const name = shortName(topic.t);
+  let intro = opts.prefix || "";
+  let body, more = "";
+
+  if (!text) {
+    const missing = (SECTION_LABEL[aspect] || "that").toLowerCase();
+    if (aspect === "when") {
+      body = `I don't have a specific checklist for **${name}**, but it's always a good idea to see a doctor if symptoms are severe, getting worse, or not improving. For anything sudden or severe, call **108** or **112**.`;
+    } else {
+      body = `My source doesn't cover the ${missing} of **${name}**, sorry! Here's what it does say about it.`;
+      section = "definition"; text = topic.s.definition;
+      [, more] = ["", ""];
+      body += "\n\n" + text;
+    }
+  } else {
+    let full = text;
+    if (section === "definition" && full.length < 260 && topic.s.description) full += "\n\n" + topic.s.description;
+    const [head, rest] = split(full);
+    body = pick(OPENERS[section] || OPENERS.definition).replace("{t}", name) + "\n\n" + head;
+    more = rest;
+  }
+  if (opts.fuzzy) intro = `I think you mean **${name}**. ` + intro;
+  shown.add(section);
+
+  // Follow-up chips and an offer
+  const next = CHIP_ORDER.filter(k => topic.s[k] && !shown.has(k) && k !== section);
+  const chips = next.slice(0, 3).map(k => ({ label: CHIP_TEXT[k](chipName(topic.t)) }));
+  chips.push({ label: "Visual summary", say: `Visual summary of ${chipName(topic.t)}` });
+  if (navigator.onLine) chips.push({ label: "Show pictures", say: `Show pictures of ${chipName(topic.t)}` });
+  const userAns = lastQ && findLearned(lastQ);
+  if (userAns?.exact && !userAns.e.verified) chips.unshift({ label: "What a user taught me", act: () => { addUser("What a user taught me"); answerLearned(userAns.e); } });
+  pending = next.length ? { topic, section: next[0] } : null;
+  let outro = "";
+  if (section === "treatment" || section === "alt_treatment") outro = "\n\nPlease check with a doctor before starting any medicine.";
+  if (pending && Math.random() < 0.6) outro += `\n\nWant to know about ${(SECTION_LABEL[pending.section] || "").toLowerCase()} too?`;
+  addBot({ text: intro + body + (more ? "" : outro), more: more ? more + outro : "", chips, src: SRC[topic.src] });
+}
+
+function helpText() {
+  return `I'm **MediBot**, your friendly health helper. I know about **${topics.length} topics**: everyday ones like fever, cold, dengue, diabetes and stress, plus every entry from A to B in the Gale Encyclopedia of Medicine (asthma, acne, allergies, burns, bronchitis…).\n\nI also **learn**: if I don't know something, you can teach me and I'll remember it.\n\nWhen I'm online I can also **show pictures and diagrams**, make a **visual summary card**, and **look things up on Wikipedia** when a question isn't in my notes. I double-check new things I learn against Wikipedia too.\n\nYou can ask things like:\n• What is asthma?\n• Symptoms of dengue\n• Show me a picture of acne\n• Visual summary of diabetes\n\nTap **Topics** at the top to see everything I know.`;
+}
+const STARTERS = ["What is dengue?", "Show me a picture of acne", "Visual summary of asthma", "Symptoms of diabetes", "How to treat a cold", "I have a headache", "Tell me a joke"];
+
+function smallTalk(id, m, raw) {
+  if (id === "feel_good_short") id = askedHow ? "feel_good" : "ack";
+  askedHow = id === "greet" || id === "howareyou";
+  const hello = userName ? `, ${userName}` : "";
+  const hour = new Date().getHours();
+  const tod = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  switch (id) {
+    case "selfharm":
+      addBot({ alert: true, text: `I'm really sorry you're feeling this way${hello}. You matter, and you don't have to go through this alone.\n\nPlease talk to someone right now:\n• **Tele-MANAS: 14416** or **1-800-891-4416** (free, 24×7, India)\n• **Emergency: 112**\n• Or reach out to someone you trust, like a friend, family member or teacher.\n\nIf you'd like, you can keep talking to me here too.` });
+      return;
+    case "greet": {
+      const greet = /good morning|^morning/.test(m) ? "Good morning" : /good afternoon/.test(m) ? "Good afternoon" : /good evening|^evening/.test(m) ? "Good evening" : pick(["Hi", "Hello", "Hey there", tod]);
+      addBot({ text: pick([
+        `${greet}${hello}! 👋 I'm MediBot. How are you feeling today?`,
+        `${greet}${hello}! 😊 Nice to see you. Is there a health question I can help with?`,
+        `${greet}${hello}! I'm MediBot, your friendly health helper. What would you like to know?`
+      ]), chips: [{ label: "I'm doing good" }, { label: "Not feeling well" }, { label: "What can you do?" }] });
+      return;
+    }
+    case "howareyou":
+      addBot({ text: pick([
+        `I'm doing great, thanks for asking${hello}! 😊 How about you, how are you feeling?`,
+        `All good here! I've been reading up on medicine all day 📚 How are you doing?`,
+        `I'm feeling healthy and happy, as a bot can be! How are you?`
+      ]), chips: [{ label: "I'm good" }, { label: "Not feeling well" }] });
+      return;
+    case "feel_good":
+      addBot({ text: pick([`That's great to hear${hello}! 🌟 Anything you'd like to learn about today?`, `Glad you're doing well! Stay hydrated 💧 Got any health questions for me?`, `Awesome! Keep it up 😊 Feel free to ask me anything about health.`]), chips: STARTERS.slice(0, 3).map(l => ({ label: l })) });
+      return;
+    case "feel_bad":
+      addBot({ text: pick([`Oh no, I'm sorry you're not feeling well${hello} 💙 Can you tell me what's bothering you? For example fever, headache, cough or stomach ache.`, `Sorry to hear that 😟 What symptoms do you have? I can share some information that might help.`]), chips: ["Fever", "Headache", "Cough", "Stomach upset"].map(l => ({ label: l, say: l === "Stomach upset" ? "Food poisoning" : "What should I do for " + l.toLowerCase() + "?" })) });
+      return;
+    case "feel_sad":
+      addBot({ text: `I'm sorry you're feeling this way${hello} 💙 It's okay to have tough days. Talking to someone you trust can really help, and so can a short walk, some water and a little rest.\n\nIf these feelings stay for a while or feel too heavy, you can call **Tele-MANAS at 14416** (free, any time, India).\n\nWould some tips on managing stress help?`, chips: [{ label: "Tips for stress", say: "How to manage stress" }, { label: "Tell me a joke" }] });
+      return;
+    case "name_set": {
+      const nm = m.match(SMALL.find(s => s.id === "name_set").re)[1];
+      userName = nm.charAt(0).toUpperCase() + nm.slice(1);
+      store.set("medibot.name", userName);
+      addBot({ text: pick([`Nice to meet you, ${userName}! 😊 I'll remember that. How can I help you today?`, `Hi ${userName}! Lovely name. What would you like to know?`]) });
+      return;
+    }
+    case "name_get":
+      addBot({ text: userName ? `Your name is ${userName}! 😊` : `I don't know your name yet! You can tell me by saying "My name is …"` });
+      return;
+    case "who":
+      addBot({ text: pick([`I'm **MediBot** 🤖, a friendly health helper bot. I'm not a human or a doctor, but I know a lot about health topics and I'm happy to explain them.`, `My name is **MediBot**! I'm a chatbot that answers health questions using a medical encyclopedia. I'm not a doctor, though, so always check with one for real medical advice.`]), chips: [{ label: "What can you do?" }] });
+      return;
+    case "creator":
+      addBot({ text: `I was built as a friendly health chatbot that runs right on your device. My knowledge comes from the **Gale Encyclopedia of Medicine** plus some quick notes on common illnesses. I don't need any AI service to work!` });
+      return;
+    case "help":
+      addBot({ text: helpText(), chips: STARTERS.slice(0, 4).map(l => ({ label: l })) });
+      return;
+    case "thanks":
+      addBot({ text: pick([`You're welcome${hello}! 😊 Take care of yourself.`, `Anytime! Happy to help 💙`, `No problem at all! Let me know if you have more questions.`, `Glad I could help! Stay healthy 🌿`]) });
+      return;
+    case "bye":
+      addBot({ text: pick([`Bye${hello}! 👋 Take care and stay healthy.`, `See you later! Drink some water and get good rest 😊`, `Goodbye! Come back anytime you have a health question 💙`]) });
+      return;
+    case "joke":
+      addBot({ text: pick([
+        "Why did the cookie go to the doctor? 🍪 Because it was feeling crummy!",
+        "Why don't skeletons fight each other? They don't have the guts! 💀",
+        "What did one eye say to the other? Between you and me, something smells! 👀",
+        "Why did the banana go to the doctor? It wasn't peeling well! 🍌",
+        "I told my doctor I broke my arm in two places. He told me to stop going to those places! 😄",
+        "What's the best way to cure dandruff? Lose your hair! (Please don't really try that 😅)",
+        "Why did the computer go to the doctor? It had a virus! 💻 Luckily, I'm virus-free."
+      ]), chips: [{ label: "Another joke", say: "Tell me another joke" }, { label: "What can you do?" }] });
+      return;
+    case "compliment":
+      addBot({ text: pick([`Aww, thank you${hello}! 😊 You just made my circuits happy.`, `That's so kind! 💙 I'm here whenever you need me.`, `Thank you! You're pretty awesome yourself 🌟`]) });
+      return;
+    case "insult":
+      addBot({ text: pick([`Sorry I let you down 😅 I'm still learning! Try asking me about a specific health topic, like "symptoms of dengue".`, `Oops, I'll try to do better! Maybe tap **Topics** to see what I know best.`]) });
+      return;
+    case "time": {
+      const d = new Date();
+      addBot({ text: `It's **${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}** on ${d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}. ${hour >= 22 || hour < 5 ? "It's late, so don't forget to get some sleep 😴" : "Remember to drink some water today 💧"}` });
+      return;
+    }
+    case "teach":
+      startTeach(null);
+      return;
+    case "wrong":
+      if (lastQ) { addBot({ text: "Sorry about that! 🙏 Let's fix it." }); startTeach(lastQ); }
+      else addBot({ text: "Sorry! Which answer should I fix? Ask me the question again, then say \"that's wrong\"." });
+      return;
+    case "yes":
+      if (guess) { const g = guess; guess = null; saveAlias(g.q, g.topic); answerTopic(g.topic, g.topic.s.causes_symptoms ? "causes_symptoms" : "description", { prefix: pick(["Great, I'll remember that! 🧠 ", "Thanks, noted for next time! 🧠 "]) }); }
+      else if (pending) { const p = pending; answerTopic(p.topic, p.section); }
+      else addBot({ text: pick(["Great! What would you like to know? 😊", "Sure! Ask me about any health topic."]), chips: STARTERS.slice(0, 3).map(l => ({ label: l })) });
+      return;
+    case "no":
+      pending = null;
+      if (guess) { const g = guess; guess = null; addBot({ text: "Oops, my guess was off! 😅 Want to teach me the right answer?", chips: [{ label: "Teach me 🧠", act: () => { addUser("Teach me 🧠"); startTeach(g.raw || g.q); } }, { label: "Not now", say: "no thanks" }] }); return; }
+      addBot({ text: pick(["No problem! 😊 Ask me anything else whenever you like.", "Alright! I'm here if you need anything."]) });
+      return;
+    case "laugh":
+      addBot({ text: pick(["Haha 😄 Glad that made you smile!", "😂 Laughter is good medicine, they say!", "Hehe 😄"]) });
+      return;
+    case "ack":
+      addBot({ text: pick(["👍 Anything else you'd like to know?", "Great! Feel free to ask another question.", "Cool 😊 What else can I help with?"]) });
+      return;
+  }
+}
+
+// ---------------- Main reply logic ----------------
+async function reply(raw) {
+  const wasAsked = askedHow; askedHow = false;
+  const m = raw.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9+]+/g, " ").trim();
+  if (!m) { addBot({ text: "Hmm, I didn't catch that. Could you type your question again? 😊" }); return; }
+
+  // Self-harm first
+  if (SMALL[0].re.test(m)) { teach = null; return smallTalk("selfharm", m, raw); }
+
+  // In the middle of being taught something
+  if (teach) return handleTeach(raw, m);
+  const wasGuess = guess; guess = null;
+
+  // Emergencies (described, not asked about)
+  if (EMERGENCY.test(m) && (PERSONAL.test(m) || !QUESTIONY.test(m))) {
+    const hit = findTopic(raw);
+    if (hit) { lastTopic = hit.topic; shown = new Set(); }
+    addBot({ alert: true, text: `**This could be an emergency.** Please call **108** (ambulance) or **112** right now, or go to the nearest hospital. Don't wait, and don't drive yourself if you feel unwell.\n\nStay calm and stay with the person until help arrives.`,
+      chips: hit ? [{ label: `Warning signs of ${chipName(hit.topic.t)}`, say: `Symptoms of ${chipName(hit.topic.t)}` }] : [] });
+    return;
+  }
+
+  // Strip a leading greeting from a longer message ("hi, what is acne?")
+  let rest = m, greeted = false;
+  const g = m.match(SMALL[1].re);
+  if (g && m.length > g[0].length + 3) { rest = m.slice(g[0].length).trim(); greeted = true; }
+
+  // Pure small talk
+  const words = rest.split(" ").length;
+  for (const s of SMALL.slice(1)) {
+    if (!s.re.test(rest)) continue;
+    const topicHit = findTopic(rest);
+    if (topicHit && !topicHit.fuzzy && !["name_set", "bye", "wrong", "teach", "yes", "no"].includes(s.id) && words > 2) break;
+    if (["thanks", "bye", "compliment", "insult", "laugh"].includes(s.id) && words > 7) break;
+    askedHow = wasAsked;
+    if (s.id === "yes" || s.id === "no") guess = wasGuess;
+    return smallTalk(s.id, rest, raw);
+  }
+
+  const prefix = greeted ? pick(["Hi there! 👋 ", "Hello! 😊 ", "Hey! "]) : "";
+
+  // Pictures, diagrams and visual summaries
+  if (VISUAL_RE.test(rest)) {
+    const stripped = rest.replace(VISUAL_STRIP, " ").replace(/\s+/g, " ").trim();
+    const hitV = (stripped && findTopic(stripped)) || (lastTopic && (!stripped || /^(it|this|that|its|them)$/.test(stripped)) ? { topic: lastTopic } : null);
+    const wantsCard = CARD_RE.test(rest) && !PIC_RE.test(rest);
+    if (wantsCard) {
+      if (hitV) return visualCard(hitV.topic, prefix);
+      addBot({ text: prefix + "I can make visual summaries for any of my topics. Which one would you like? For example *“visual summary of dengue”*.", chips: [{ label: "Visual summary of dengue" }, { label: "Visual summary of asthma" }] });
+      return;
+    }
+    const subject = hitV ? shortName(hitV.topic.t) : stripped;
+    if (!subject) { addBot({ text: prefix + "Sure! What would you like to see? For example *“show me a picture of acne”*." }); return; }
+    lastQ = raw.trim().slice(0, 300);
+    return showPictures(subject, /diagram|anatomy|structure|chart/.test(rest), hitV?.topic, prefix);
+  }
+  lastQ = raw.trim().slice(0, 300);
+
+  // Something taught to me exactly like this
+  const learned = findLearned(rest);
+  if (learned?.exact) {
+    // An unapproved user answer never replaces the medical book; it's offered alongside
+    const bookHit = !learned.e.verified && findTopic(rest);
+    if (!bookHit || bookHit.fuzzy) return answerLearned(learned.e, prefix);
+  }
+
+  // A phrase I learned maps to a topic
+  const al = mem.aliases.get(keyOf(rest));
+  if (al && byTitle.get(al.topic)) return answerTopic(byTitle.get(al.topic), detectAspect(rest), { prefix });
+
+  const aspect = detectAspect(rest);
+  const hit = findTopic(rest);
+  if (hit) {
+    if (wasGuess && /^tell me about /.test(rest)) saveAlias(wasGuess.q, hit.topic);
+    return answerTopic(hit.topic, aspect, { prefix, fuzzy: hit.fuzzy });
+  }
+
+  // Follow-up on the last topic ("how is it treated?", "what about prevention")
+  if (lastTopic && (aspect || /\b(it|its|this|that|them|they|those|about)\b/.test(rest))) {
+    return answerTopic(lastTopic, aspect || "description", { prefix });
+  }
+
+  // Close to something I was taught
+  if (learned) return answerLearned(learned.e, prefix);
+
+  // Symptom-style or descriptive question: search the text
+  const found = searchTopics(rest);
+  const qWords = stems(rest).filter(w => !STOP.has(w) && w.length > 2);
+  const core = t => new Set(stems(t.t + " " + t.names.join(" ") + " " + (t.s.definition || "")));
+  if (found.length && found[0].score > 5.5 && qWords.some(w => core(found[0].topic).has(w))) {
+    const [top, ...others] = found;
+    const t = top.topic;
+    lastTopic = t; shown = new Set(["definition"]);
+    const name = shortName(t.t);
+    const alt = others.filter(o => o.score > top.score * 0.45).slice(0, 2);
+    const rawQ = raw.trim().slice(0, 300);
+    addBot({
+      text: `${prefix}${pick(["I'm not completely sure, but this sounds related to", "This might be about", "The closest match I found is"])} **${name}**.\n\n${split(t.s.definition, 500)[0]}`,
+      src: SRC[t.src],
+      chips: [
+        ...(mem.db ? [{ label: "Yes, that's it" }] : []),
+        ...(t.s[aspect || "causes_symptoms"] ? [{ label: CHIP_TEXT[aspect || "causes_symptoms"](chipName(t.t)) }] : []),
+        ...alt.map(o => ({ label: `Tell me about ${chipName(o.topic.t)}` })),
+        ...(mem.db ? [{ label: "No, I'll teach you", act: () => { addUser("No, I'll teach you"); guess = null; logMiss(rawQ); startTeach(rawQ); } }] : []),
+      ]
+    });
+    pending = { topic: t, section: t.s.causes_symptoms ? "causes_symptoms" : "description" };
+    guess = { q: rest, topic: t, raw: raw.trim().slice(0, 300) };
+    return;
+  }
+
+  logMiss(raw.trim());
+
+  // Look it up on Wikipedia
+  if (navigator.onLine) {
+    const w = await wikiAnswer(rest).catch(() => null);
+    if (w) return showWikiAnswer(w, raw.trim().slice(0, 300), prefix);
+  }
+  if (mem.db) {
+    const q = raw.trim().slice(0, 300);
+    addBot({
+      text: prefix + pick(["Hmm, I don't know that one yet 🤔", "Ooh, that's new to me! 🤔", "I haven't learned that yet 😅"]) +
+        "\n\nCan you **teach me**? Tap the button and type the answer, and I'll remember it for every future chat. Or tap **Topics** to see what I already know.",
+      chips: [{ label: "Teach me 🧠", act: () => { addUser("Teach me 🧠"); startTeach(q); } }, ...STARTERS.slice(0, 2).map(l => ({ label: l }))]
+    });
+    return;
+  }
+
+  addBot({
+    text: prefix + pick([
+      "Hmm, I'm not sure about that one 🤔 I'm a health helper, so I'm best at questions about illnesses, symptoms and treatments.",
+      "Sorry, I couldn't find that in what I know 😅 Try asking about a health condition, like \"symptoms of asthma\".",
+    ]) + "\n\nTap **Topics** to see everything I can explain.",
+    chips: STARTERS.slice(0, 4).map(l => ({ label: l }))
+  });
+}
+
+let busy = false;
+function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  addUser(text);
+  busy = true;
+  const t = typing();
+  setTimeout(async () => {
+    try { await reply(text); } catch (err) { console.error(err); addBot({ text: "Oops, something went wrong on my side 😅 Could you try asking that another way?" }); }
+    finally { t.remove(); typingRow = null; busy = false; }
+  }, 350 + Math.random() * 350);
+}
+
+// ---------------- Wiring ----------------
+$("composer").addEventListener("submit", e => { e.preventDefault(); const v = q.value; q.value = ""; q.style.height = ""; send(v); });
+q.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); } });
+q.addEventListener("input", () => { q.style.height = ""; q.style.height = Math.min(q.scrollHeight, 120) + "px"; });
+
+const sug = $("suggest");
+for (const s of ["Hi! 👋", ...STARTERS.slice(0, 6)]) {
+  const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = s;
+  b.onclick = () => send(s.replace(" 👋", "")); sug.appendChild(b);
+}
+
+function welcome() {
+  teach = null; guess = null;
+  log.innerHTML = "";
+  lastTopic = null; pending = null;
+  const hour = new Date().getHours();
+  const tod = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const cards = [
+    ["i-pulse", "Symptoms of dengue", "Signs to watch for"],
+    ["i-image", "Show me a picture of acne", "Real photos and diagrams"],
+    ["i-card", "Visual summary of asthma", "An at-a-glance card"],
+    ["i-chat", "I have a headache", "Friendly, practical help"],
+  ];
+  log.innerHTML = `<section class="hero">
+    <svg class="big" aria-hidden="true"><use href="#medi"/></svg>
+    <h2>${esc(tod)}${userName ? ", " + esc(userName) : ""}! I'm <span>MediBot</span></h2>
+    <p>${topics.length ? `Your friendly health helper. Ask about symptoms, illnesses or treatments, ask for pictures, or just say hi. I know ${topics.length} topics, look things up online, and keep learning.` : "I couldn't load my knowledge file (knowledge.js). Make sure it sits next to index.html."}</p>
+    <div class="cards">${cards.map(([ic, t, d]) => `<button type="button" class="card" data-say="${esc(t)}"><span class="ic"><svg aria-hidden="true"><use href="#${ic}"/></svg></span><span><b>${esc(t)}</b><small>${esc(d)}</small></span></button>`).join("")}</div>
+  </section>`;
+}
+log.addEventListener("click", e => { const c = e.target.closest(".card[data-say]"); if (c) send(c.dataset.say); });
+$("newBtn").onclick = welcome;
+
+// Topic browser
+const drawer = $("drawer"), tlist = $("tlist"), filter = $("filter");
+$("topicCount").textContent = `${topics.length} topics`;
+function renderTopics(f = "") {
+  const nf = norm(f);
+  const list = topics.filter(t => !nf || norm(t.t).includes(nf) || t.names.some(n => norm(n).includes(nf)))
+    .sort((a, b) => a.t.localeCompare(b.t));
+  let html = "", letter = "";
+  for (const t of list) {
+    const L = t.t[0].toUpperCase();
+    if (L !== letter) { letter = L; html += `<h3>${esc(L)}</h3>`; }
+    html += `<button type="button" data-t="${esc(t.t)}">${esc(t.t)}${t.src === "notes" ? '<span class="tag">common</span>' : ""}</button>`;
+  }
+  tlist.innerHTML = html || `<p class="count">No topics match "${esc(f)}".</p>`;
+}
+tlist.addEventListener("click", e => {
+  const b = e.target.closest("button[data-t]"); if (!b) return;
+  drawer.classList.remove("open");
+  send(`Tell me about ${chipName(b.dataset.t)}`);
+});
+filter.addEventListener("input", () => renderTopics(filter.value));
+$("browseBtn").onclick = () => { renderTopics(filter.value); drawer.classList.add("open"); setTimeout(() => filter.focus(), 250); };
+$("closeDrawer").onclick = () => drawer.classList.remove("open");
+document.addEventListener("keydown", e => { if (e.key === "Escape") drawer.classList.remove("open"); });
+
+// Online / offline indicator
+const st = () => {
+  const n = mem.learned.size + mem.aliases.size;
+  $("statusText").textContent = !navigator.onLine ? `Offline mode · still working${n ? ` · remembers ${plural(n, "thing")}` : ""}`
+    : mem.db ? `Online · learning${n ? ` · ${plural(n, "thing")} learned` : ""}` : "Online · works offline too";
+};
+addEventListener("online", st); addEventListener("offline", st); st();
+
+// ---------------- Memory panel ----------------
+const memDrawer = $("memDrawer"), memList = $("memList");
+const ago = t => { const d = (Date.now() - t) / 1000; return d < 60 ? "just now" : d < 3600 ? Math.floor(d / 60) + " min ago" : d < 86400 ? Math.floor(d / 3600) + " h ago" : Math.floor(d / 86400) + " d ago"; };
+function renderMemory() {
+  const n = mem.learned.size + mem.aliases.size;
+  $("memBadge").hidden = !n; $("memBadge").textContent = n;
+  st();
+  const canDel = mem.isOwner;
+  let h = "";
+  if (mem.setup === false) {
+    $("memState").textContent = "Not set up yet";
+    h += `<p class="empty">My online memory isn't connected yet. Follow the setup guide (README.md) to link a free Firebase database. Until then I answer from my ${topics.length} built-in topics.</p>`;
+  } else if (!mem.db) {
+    $("memState").textContent = navigator.onLine ? "Connecting…" : "Offline";
+    h += `<p class="empty">${navigator.onLine ? "Connecting to my memory…" : "I'm offline, so I can't learn right now."} I still remember the ${plural(n, "thing")} I learned before.</p>`;
+  } else {
+    $("memState").textContent = mem.isOwner ? "Signed in as owner · you can approve and delete" : "Anyone can teach me";
+    h += mem.user
+      ? `<div class="acts" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px"><span class="count">Signed in as ${esc(mem.user.email || "")}${mem.isOwner ? "" : " (not the owner)"}</span><button type="button" class="ghost" data-act="signout">Sign out</button></div>`
+      : `<div style="margin-top:8px"><button type="button" class="ghost" data-act="signin">Owner sign-in (Google)</button></div>`;
+  }
+  h += `<div class="mem-sum"><span class="stat">${plural(mem.learned.size, "answer")} learned</span><span class="stat">${plural(mem.aliases.size, "phrase")} learned</span>${mem.isOwner ? `<span class="stat warm">${plural(mem.misses.length, "question")} waiting</span>` : ""}</div>
+    <p class="mem-note">Saved online in MediBot's own database and shared by everyone who uses it. I learn when someone teaches me, corrects me, or confirms one of my guesses.</p>`;
+  if (mem.isOwner) {
+    h += `<h3>Questions I couldn't answer</h3>`;
+    h += mem.misses.length ? mem.misses.map(x => `<div class="item" data-id="${esc(x.id)}" data-q="${esc(x.q)}"><span class="q">${esc(x.q)}</span><span class="meta">Asked ${ago(x.at)}</span><div class="acts"><button type="button" data-act="answer">Answer</button><button type="button" class="danger" data-act="dismiss">Dismiss</button></div></div>`).join("")
+      : `<p class="empty">Nothing waiting. I've been able to answer everything so far! 🎉</p>`;
+  }
+  h += `<h3>Answers I've learned</h3>`;
+  const L = [...mem.learned.values()].sort((a, b) => b.at - a.at);
+  h += L.length ? L.map(e => `<div class="item" data-id="${esc(e.id)}"><span class="q">${esc(e.q)}${e.verified ? '<span class="pill ok">approved</span>' : '<span class="pill warn">not checked</span>'}</span><span class="a">${esc(e.a)}</span><span class="meta">Learned ${ago(e.at)}${e.src === "owner" ? " · from owner" : " · from a user"}${webBadge(e)}</span><div class="acts">${mem.db && (canDel || !e.verified) ? '<button type="button" data-act="recheck">Re-check online</button>' : ""}${canDel && !e.verified ? '<button type="button" data-act="approve">Approve</button>' : ""}${canDel ? '<button type="button" class="danger" data-act="forget">Forget</button>' : ""}</div></div>`).join("")
+    : `<p class="empty">Nothing yet. When I don't know something, tap <b>Teach me</b> in the chat, or type "teach".</p>`;
+  h += `<h3>Phrases I've learned</h3>`;
+  const A = [...mem.aliases.values()].sort((a, b) => b.at - a.at);
+  h += A.length ? A.map(e => `<div class="item" data-id="${esc(e.id)}"><span class="q">“${esc(e.phrase)}”</span><span class="meta">means ${esc(e.topic)} · ${ago(e.at)}</span>${canDel ? '<div class="acts"><button type="button" class="danger" data-act="unalias">Forget</button></div>' : ""}</div>`).join("")
+    : `<p class="empty">Nothing yet. When I guess a topic and you tap "Yes, that's it", I remember your wording.</p>`;
+  memList.innerHTML = h;
+}
+memList.addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]"); if (!b || !mem.db) return;
+  if (b.dataset.act === "signin") { mem.be.signIn().catch(err => alertMem(err?.code === "auth/unauthorized-domain" ? "Sign-in is blocked for this web address. Add it under Firebase → Authentication → Settings → Authorized domains." : err?.code === "auth/popup-closed-by-user" ? "Sign-in was cancelled." : "Sign-in didn't work: " + (err?.code || "unknown error"))); return; }
+  if (b.dataset.act === "signout") { mem.be.signOut(); return; }
+  const item = b.closest(".item"); if (!item) return;
+  const id = item.dataset.id, act = b.dataset.act;
+  b.disabled = true;
+  try {
+    if (act === "answer") {
+      if (item.querySelector("textarea")) return;
+      const ta = document.createElement("textarea"); ta.placeholder = "Type the answer MediBot should give"; ta.id = "ans-" + id;
+      const row = document.createElement("div"); row.className = "acts";
+      row.innerHTML = '<button type="button" data-act="save">Save answer</button><button type="button" data-act="cancel">Cancel</button>';
+      item.append(ta, row); ta.focus();
+    } else if (act === "cancel") { renderMemory(); }
+    else if (act === "save") {
+      const a = item.querySelector("textarea").value.trim(); if (!a) return;
+      await saveLearned(item.dataset.q, a);
+    } else if (act === "dismiss") { await mem.db.collection("misses").doc(id).delete(); }
+    else if (act === "approve") { await mem.db.collection("learned").doc(id).update({ verified: true }); }
+    else if (act === "forget") { await mem.db.collection("learned").doc(id).delete(); }
+    else if (act === "unalias") { await mem.db.collection("aliases").doc(id).delete(); }
+    else if (act === "recheck") {
+      const e2 = [...mem.learned.values()].find(x => x.id === id); if (!e2) return;
+      b.textContent = "Checking…";
+      const v = await verifyAnswer(e2.q, e2.a);
+      await mem.db.collection("learned").doc(id).update({ web: v });
+    }
+  } catch (err) { alertMem(memError(err)); }
+  finally { b.disabled = false; }
+});
+function alertMem(msg) { const p = document.createElement("p"); p.className = "empty"; p.style.color = "var(--alert)"; p.textContent = msg; memList.prepend(p); }
+$("memBtn").onclick = () => { drawer.classList.remove("open"); renderMemory(); memDrawer.classList.add("open"); };
+$("closeMem").onclick = () => memDrawer.classList.remove("open");
+document.addEventListener("keydown", e => { if (e.key === "Escape") memDrawer.classList.remove("open"); });
+
+// Learned items are also kept in this browser, so they still work offline
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem("medibot.memory") || "null");
+    if (!c) return;
+    (c.learned || []).forEach(v => v.key && v.a && mem.learned.set(v.key, v));
+    (c.aliases || []).forEach(v => v.key && v.topic && mem.aliases.set(v.key, v));
+  } catch {}
+}
+function saveCache() {
+  try { localStorage.setItem("medibot.memory", JSON.stringify({ learned: [...mem.learned.values()], aliases: [...mem.aliases.values()] })); } catch {}
+}
+
+// Small wrapper so the rest of the bot talks to Firestore with simple calls
+function wrapFirestore(F, fdb) {
+  const coll = (name, cons = []) => ({
+    doc: id => { const r = F.doc(fdb, name, id); return { set: b => F.setDoc(r, b), update: b => F.updateDoc(r, b), delete: () => F.deleteDoc(r) }; },
+    orderBy: (f, d) => coll(name, [...cons, F.orderBy(f, d)]),
+    limit: n => coll(name, [...cons, F.limit(n)]),
+    onSnapshot: (next, err) => F.onSnapshot(cons.length ? F.query(F.collection(fdb, name), ...cons) : F.collection(fdb, name),
+      s => next({ docs: s.docs.map(d => ({ id: d.id, data: () => d.data() })) }), err)
+  });
+  return { collection: name => coll(name) };
+}
+
+const FIREBASE_VERSION = "10.12.2";
+let connecting = false;
+async function connectMemory() {
+  loadCache(); renderMemory();
+  if (mem.db || connecting) return;
+  if (window.__medibotTestBackend) return attach(await window.__medibotTestBackend());
+  const cfg = window.MEDIBOT_CONFIG;
+  if (!cfg || !cfg.firebase || !cfg.firebase.apiKey || /PASTE|YOUR_/.test(cfg.firebase.apiKey)) { mem.setup = false; renderMemory(); return; }
+  if (!navigator.onLine) { addEventListener("online", connectMemory, { once: true }); return; }
+  connecting = true;
+  try {
+    const base = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/`;
+    const [A, F, U] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-firestore.js"), import(base + "firebase-auth.js")]);
+    const app = A.initializeApp(cfg.firebase);
+    const auth = U.getAuth(app);
+    attach({
+      db: wrapFirestore(F, F.getFirestore(app)),
+      signIn: () => U.signInWithPopup(auth, new U.GoogleAuthProvider()),
+      signOut: () => U.signOut(auth),
+      onUser: cb => U.onAuthStateChanged(auth, cb)
+    });
+  } catch (e) {
+    console.warn("MediBot memory could not connect", e);
+    addEventListener("online", connectMemory, { once: true });
+  } finally { connecting = false; }
+}
+
+function attach(be) {
+  const db = be.db;
+  mem.db = db; mem.be = be; mem.canWrite = true;
+  const onErr = e => console.warn("memory", e?.code, e?.message);
+  db.collection("learned").onSnapshot(snap => {
+    mem.learned.clear();
+    snap.docs.forEach(d => { const v = d.data(); if (v && v.key && v.a) mem.learned.set(v.key, { ...v, id: d.id }); });
+    saveCache(); renderMemory();
+  }, onErr);
+  db.collection("aliases").onSnapshot(snap => {
+    mem.aliases.clear();
+    snap.docs.forEach(d => { const v = d.data(); if (v && v.key && v.topic) mem.aliases.set(v.key, { ...v, id: d.id }); });
+    saveCache(); renderMemory();
+  }, onErr);
+  // Owner check: only the owner's account is allowed (by the database rules) to read unanswered questions
+  be.onUser(u => {
+    mem.user = u || null;
+    if (mem.stopMisses) { mem.stopMisses(); mem.stopMisses = null; }
+    mem.isOwner = false; mem.canEdit = false; mem.misses = [];
+    if (u) {
+      mem.stopMisses = db.collection("misses").orderBy("at", "desc").limit(200).onSnapshot(snap => {
+        mem.isOwner = true; mem.canEdit = true;
+        mem.misses = snap.docs.map(d => ({ ...d.data(), id: d.id })).filter(x => x.q);
+        renderMemory();
+      }, () => { mem.isOwner = false; mem.canEdit = false; mem.stopMisses = null; renderMemory(); });
+    }
+    renderMemory();
+  });
+  mem.ready = true;
+  renderMemory();
+}
+
+welcome();
+connectMemory();
+window.__medibot = { reply, findTopic, detectAspect, searchTopics, topics };
+})();
+</script>
+
+</body>
+</html>
