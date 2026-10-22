@@ -4,7 +4,7 @@
 // Firebase console → Project settings → Your apps → medibot-web → Config.
 window.MEDIBOT_CONFIG = {
   firebase: {
-    apiKey: "PASTE_YOUR_API_KEY",
+    apiKey: "AIzaSyC-e0GYwaMAV7N5AXFFnVlF-pSB-qfQ4z4",
     authDomain: "medibot-26957.firebaseapp.com",
     projectId: "medibot-26957",
     storageBucket: "medibot-26957.firebasestorage.app",
